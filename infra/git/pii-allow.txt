@@ -9,3 +9,5 @@
 ^0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913$
 # .local is mDNS / placeholder only, never a real mail domain (e.g. Message-ID domains)
 @[A-Za-z0-9.-]+\.local$
+# GitHub web-flow committer on commits made in the web UI
+^noreply@github\.com$
