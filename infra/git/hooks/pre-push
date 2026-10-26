@@ -1,0 +1,20 @@
+#!/bin/bash
+# chkm8 pre-push: last gate before anything leaves the Mac. Audits every commit being pushed
+# (blobs, messages, author emails) with gitleaks + pii_check.py, so history is covered too.
+set -euo pipefail
+GIT_DIR_TOOLS="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+export PATH="/opt/homebrew/bin:$PATH"
+ZERO=0000000000000000000000000000000000000000
+
+while read -r _local_ref local_sha _remote_ref remote_sha; do
+  [[ "$local_sha" == "$ZERO" ]] && continue                    # branch delete: nothing to scan
+  if [[ "$remote_sha" == "$ZERO" ]] || ! git cat-file -e "$remote_sha" 2>/dev/null; then
+    range="$local_sha"                                           # new branch / rewritten history: scan all
+  else
+    range="$remote_sha..$local_sha"
+  fi
+  gitleaks git --redact --no-banner --log-level warn --log-opts="$range" . \
+    || { echo "pre-push: gitleaks found a secret in $range; push blocked" >&2; exit 1; }
+  /usr/bin/python3 "$GIT_DIR_TOOLS/pii_check.py" history $range \
+    || { echo "pre-push: private data in $range; push blocked" >&2; exit 1; }
+done

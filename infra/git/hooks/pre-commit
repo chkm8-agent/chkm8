@@ -1,0 +1,18 @@
+#!/bin/bash
+# chkm8 pre-commit: refuse commits that would put secrets or private data into git.
+#   1. gitleaks on the staged diff (API keys, tokens, passwords, high-entropy strings)
+#   2. pii_check.py on the staged files (emails, wallet addresses, IPs, SSH keys, map values,
+#      big files, secret-looking filenames) + commit identity must be the GitHub noreply address
+# Both scan the index, i.e. content AFTER the redact clean filter: exactly what would be committed.
+set -euo pipefail
+GIT_DIR_TOOLS="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+export PATH="/opt/homebrew/bin:$PATH"
+
+if ! command -v gitleaks >/dev/null; then
+  echo "pre-commit: gitleaks not installed (brew install gitleaks); refusing to commit" >&2
+  exit 1
+fi
+gitleaks git --pre-commit --staged --redact --no-banner --log-level warn . \
+  || { echo "pre-commit: gitleaks found a secret (see above); commit blocked" >&2; exit 1; }
+
+/usr/bin/python3 "$GIT_DIR_TOOLS/pii_check.py" staged

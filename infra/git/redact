@@ -1,0 +1,53 @@
+#!/usr/bin/python3
+"""git clean/smudge filter: keep private values (emails, wallet, server IP, ...) out of git.
+
+  clean  (working tree -> repo):  real value          -> <redacted:name>
+  smudge (repo -> working tree):  <redacted:name>     -> real value
+
+So the files on disk keep working unchanged, while every blob git stores (and pushes) holds only
+placeholders. The value list is private and lives OUTSIDE every repo:
+    ~/.config/chkm8-git/redactions.json   {"map": [[value, name], ...]}   (chmod 600)
+
+Wired up per repo by setup-repo.sh (filter.redact.clean/smudge, filter.redact.required=true).
+If the map is missing, `clean` FAILS, so git refuses to stage rather than commit real values;
+`smudge` passes content through unchanged (placeholders stay placeholders).
+"""
+import json
+import os
+import sys
+
+MAP = os.environ.get("CHKM8_REDACT_MAP", os.path.expanduser("~/.config/chkm8-git/redactions.json"))
+
+
+def load():
+    with open(MAP, encoding="utf-8") as f:
+        pairs = json.load(f)["map"]
+    # longest value first so e.g. the full wallet address wins over its 0x prefix
+    pairs = sorted(pairs, key=lambda p: -len(p[0]))
+    return [(v.encode(), f"<redacted:{n}>".encode()) for v, n in pairs]
+
+
+def main():
+    mode = sys.argv[1] if len(sys.argv) > 1 else ""
+    data = sys.stdin.buffer.read()
+    try:
+        pairs = load()
+    except Exception as e:
+        if mode == "clean":
+            sys.stderr.write(f"redact: cannot load {MAP}: {e}; refusing to stage unredacted content\n")
+            sys.exit(1)
+        pairs = []
+    if mode == "clean":
+        for real, ph in pairs:
+            data = data.replace(real, ph)
+    elif mode == "smudge":
+        for real, ph in pairs:
+            data = data.replace(ph, real)
+    else:
+        sys.stderr.write("usage: redact clean|smudge < file\n")
+        sys.exit(2)
+    sys.stdout.buffer.write(data)
+
+
+if __name__ == "__main__":
+    main()

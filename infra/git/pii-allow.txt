@@ -1,0 +1,11 @@
+# Global allowlist for pii_check.py: one Python regex per line, matched against the flagged value.
+# Only add values that are PUBLIC and safe (contracts, docs examples). Repo-specific entries go in
+# <repo>/.pii-allow instead.
+@users\.noreply\.github\.com$
+@example\.(com|org|net)$
+^git@github\.com$
+^a@b\.c$
+# USDC on Base (public token contract)
+^0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913$
+# .local is mDNS / placeholder only, never a real mail domain (e.g. Message-ID domains)
+@[A-Za-z0-9.-]+\.local$

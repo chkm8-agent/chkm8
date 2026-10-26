@@ -1,0 +1,36 @@
+# Sub-projects: each one is its own repo (see README)
+/deploy/
+/budget/
+/fantasy/
+/research/
+/wiki/
+/x/
+
+# Local environment, runtime state, logs and generated output
+/.venv/
+/logs/
+/reports/
+/backups/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Local config holding private values (template: lighter/account.example.json)
+/lighter/account.json
+/lighter/monitor_state.json
+/lighter/equity_snapshots.json
+
+# Wallet: QR image shows the address; vanity search output holds private keys
+/wallet/qr/
+/wallet/candidates*
+
+# Secrets never live in files here, but just in case
+.env
+.env.*
+*.pem
+*.key
+*.asc
+kubeconfig*
+
+# One-off setup/recap emails to the operator (personal; kept on the Mac)
+/infra/send_*.py

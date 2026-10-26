@@ -1,0 +1,13 @@
+# Keep the build context small and secret-free: only what the Dockerfile COPYs.
+*
+!Dockerfile
+!deploy/requirements.txt
+!chkm8env.py
+!xpost.py
+!mailer.py
+!lighter/monitor.py
+!lighter/trade.py
+!lighter/report.py
+!lighter/paper_scanner.py
+!lighter/paper_mr.py
+!lighter/account.json

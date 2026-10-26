@@ -1,0 +1,19 @@
+# Private values (emails, wallet, server IP, ...) are swapped for <redacted:name> placeholders on
+# commit and restored on checkout by the "redact" filter (chkm8 infra/git/redact). A clone without
+# that filter just sees the placeholders.
+* filter=redact
+# binaries: never filtered
+*.png -filter
+*.jpg -filter
+*.jpeg -filter
+*.webp -filter
+*.gif -filter
+*.ico -filter
+*.pdf -filter
+*.pkl -filter
+*.woff -filter
+*.woff2 -filter
+*.ttf -filter
+*.otf -filter
+*.zip -filter
+*.gz -filter

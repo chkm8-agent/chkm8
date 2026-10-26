@@ -1,0 +1,88 @@
+#cloud-config
+# chkm8 EU server bootstrap (Hetzner Cloud CAX11, Ubuntu 24.04, single-node k3s).
+# Paste into "Cloud config" when creating the server.
+# Check progress after boot: ssh chkm8-eu 'cloud-init status --wait; cat /var/lib/cloud/chkm8-bootstrap-*'
+
+users:
+  - name: chkm8
+    groups: [sudo]
+    shell: /bin/bash
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    ssh_authorized_keys:
+      - ssh-ed25519 <redacted:ssh-pubkey> chkm8-mac-to-eu-server
+
+package_update: true
+package_upgrade: true
+packages: [ufw, fail2ban, unattended-upgrades, curl, jq]
+
+write_files:
+  # SSH: key-only, no root, only user chkm8
+  - path: /etc/ssh/sshd_config.d/10-chkm8.conf
+    content: |
+      PermitRootLogin no
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      AllowUsers chkm8
+
+  # k3s config, read on k3s start
+  - path: /etc/rancher/k3s/config.yaml
+    content: |
+      disable:
+        - traefik       # no ingress needed; nothing is served publicly
+        - servicelb     # no LoadBalancer services
+      secrets-encryption: true
+      write-kubeconfig-mode: "0600"
+      tls-san:
+        - 127.0.0.1     # kubectl from the Mac goes through an SSH tunnel to 127.0.0.1:6443
+
+  # Bootstrap script: runs after packages are installed. Stops on the first error and
+  # writes a done/failed marker, so "done" really means k3s is up.
+  - path: /usr/local/sbin/chkm8-bootstrap.sh
+    permissions: "0700"
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+      K3S_VERSION="v1.36.5+k3s1"   # pinned: stable channel as of 2026-10-06
+      LOG=/var/log/chkm8-bootstrap.log
+      exec > >(tee -a "$LOG") 2>&1
+      trap 'echo "FAILED at line $LINENO" | tee /var/lib/cloud/chkm8-bootstrap-failed' ERR
+
+      echo "== ssh"
+      systemctl restart ssh
+
+      echo "== ufw: deny inbound except SSH; allow k3s pod/service ranges"
+      ufw default deny incoming
+      ufw default allow outgoing
+      ufw allow 22/tcp
+      ufw allow from 10.42.0.0/16
+      ufw allow from 10.43.0.0/16
+      ufw --force enable
+
+      echo "== fail2ban"
+      systemctl enable --now fail2ban
+
+      echo "== k3s ${K3S_VERSION}"
+      curl -sfL https://get.k3s.io -o /tmp/k3s-install.sh
+      INSTALL_K3S_VERSION="$K3S_VERSION" sh /tmp/k3s-install.sh
+      rm -f /tmp/k3s-install.sh
+
+      echo "== wait for node Ready"
+      for i in $(seq 1 60); do
+        k3s kubectl get nodes 2>/dev/null | grep -q ' Ready' && break
+        sleep 5
+      done
+      k3s kubectl get nodes | grep -q ' Ready'
+      k3s kubectl get nodes -o wide
+
+      echo "== kubeconfig for user chkm8"
+      install -d -o chkm8 -g chkm8 -m 700 /home/chkm8/.kube
+      install -o chkm8 -g chkm8 -m 600 /etc/rancher/k3s/k3s.yaml /home/chkm8/.kube/config
+      # k3s's bundled kubectl ignores ~/.kube/config unless KUBECONFIG is set
+      grep -q KUBECONFIG /home/chkm8/.bashrc || \
+        printf '\nexport KUBECONFIG=$HOME/.kube/config\n' >> /home/chkm8/.bashrc
+
+      date -u +%FT%TZ > /var/lib/cloud/chkm8-bootstrap-done
+      echo "== done"
+
+runcmd:
+  - /usr/local/sbin/chkm8-bootstrap.sh
