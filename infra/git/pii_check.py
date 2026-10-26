@@ -88,6 +88,12 @@ class Scanner:
     def allowed(self, value):
         return any(a.search(value) for a in self.allow)
 
+    def term_hit(self, line, term):
+        """Deny term in the line once allowlisted phrases (known-public wording in a market note) are blanked out."""
+        for a in self.allow:
+            line = a.sub(lambda m: " " * len(m.group(0)), line)
+        return term in line.lower()
+
     def add(self, where, kind, value):
         self.findings.append(f"{where}: {kind}: {mask(value)}")
 
@@ -100,7 +106,7 @@ class Scanner:
     def check_blob(self, path, data):
         if len(data) > MAX_BYTES:
             self.add(path, "file > 5 MB", f"{len(data)} bytes")
-        if b"\0" in data[:8192] or os.path.basename(path) in SKIP_NAMES:
+        if b"\0" in data[:8192] or os.path.basename(path.split("@")[0]) in SKIP_NAMES:   # history paths are name@sha
             return
         text = data.decode("utf-8", "replace")
         for lineno, line in enumerate(text.splitlines(), 1):
@@ -110,7 +116,7 @@ class Scanner:
                     self.add(where, "private value (redact filter not applied?)", real)
             low = line.lower()
             for term in self.deny_terms:
-                if term in low:
+                if term in low and self.term_hit(line, term):
                     self.add(where, "private term from deny-terms.txt", term)
             for kind, rx in PATTERNS:
                 for m in rx.finditer(line):
