@@ -21,6 +21,8 @@ git config filter.redact.clean "$TOOLS/redact clean"
 git config filter.redact.smudge "$TOOLS/redact smudge"
 git config filter.redact.required true
 git config core.hooksPath "$TOOLS/hooks"
+# every commit lists r3lik as co-author (prepare-commit-msg); noreply address = counts on his GitHub graph
+git config chkm8.coauthor "r3lik <3232601+r3lik@users.noreply.github.com>"
 
 if [[ ! -f .gitattributes ]]; then
   cat > .gitattributes <<'EOF'
