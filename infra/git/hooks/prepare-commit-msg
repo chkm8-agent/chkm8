@@ -1,0 +1,11 @@
+#!/bin/sh
+# prepare-commit-msg (shared chkm8 hooks dir): add a Co-authored-by trailer when the repo opts in.
+# Opt in per repo:  git config chkm8.coauthor "r3lik <3232601+r3lik@users.noreply.github.com>"
+# Use the co-author's GitHub noreply address: it always links to their account (contribution graph)
+# and keeps real emails out of public history.
+msg_file="$1"; source="$2"
+co="$(git config --get chkm8.coauthor)"
+[ -z "$co" ] && exit 0
+[ "$source" = "merge" ] && exit 0
+case "$co" in *@users.noreply.github.com\>) ;; *) echo "prepare-commit-msg: chkm8.coauthor must use a GitHub noreply address" >&2; exit 1 ;; esac
+git interpret-trailers --in-place --if-exists addIfDifferent --trailer "Co-authored-by: $co" "$msg_file"
