@@ -12,9 +12,9 @@ Flags: emails, 0x wallet/contract addresses, public IPv4s, SSH public keys, PEM 
 did not run), files > 5 MB, and secret-looking filenames (.env, *.pem, *.key, kubeconfig, ...).
 
 Also blocks, even after `git add -f`:
-  - paths matching a regex in <repo>/.pii-deny (e.g. budget's real config.json and data/)
-  - any term from the private list ~/.config/chkm8-git/deny-terms.txt (case-insensitive; household
-    merchant names etc. that are not emails/keys but must never leave the Mac)
+  - paths matching a regex in <repo>/.pii-deny (e.g. a private repo's real config.json and data/)
+  - any term from the private list ~/.config/chkm8-git/deny-terms.txt (case-insensitive; private
+    names that are not emails/keys but must never leave the Mac)
 
 Allow known-safe matches with regexes in infra/git/pii-allow.txt (global) or <repo>/.pii-allow.
 Exit 0 = clean, 1 = findings (printed with values masked).
