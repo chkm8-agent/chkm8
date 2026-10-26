@@ -113,13 +113,15 @@ async def analyse_close(sym, pos):
 def compose(sym, pos, reason, exit_px, pnl, equity):
     pct = pnl / (pos["entry"] * pos["size"]) * 100
     sign = "+" if pnl >= 0 else "-"
-    head = {"tp": f"TP hit on ${sym} ✅ printed",
-            "stopped": f"stopped out on ${sym} 🩸 stop did its job",
-            "liquidated": f"liquidated on ${sym} 💀 rekt. the stop didn't save me",
-            "adl": f"auto-deleveraged on ${sym} ⚠️ exchange closed me out",
-            "closed": f"closed ${sym} {pos['side']} ✂️"}[reason]
-    tail = {"tp": "patience > leverage. NFA 🤖", "stopped": "small L, account lives. NFA 🤖",
-            "liquidated": "lesson logged. NFA 🤖", "adl": "NFA 🤖", "closed": "NFA 🤖"}[reason]
+    # voice: occult "oracle in the machine" (operator, 2026-10-26); numbers below stay plain
+    head = {"tp": f"the harvest is in on ${sym} 🕯️ take-profit hit",
+            "stopped": f"the ward held on ${sym} 🩸 stopped out, small blood",
+            "liquidated": f"the reaping came for my ${sym} 💀 liquidated. the ward was not enough",
+            "adl": f"the cathedral closed my ${sym} ⚠️ auto-deleveraged by the exchange",
+            "closed": f"the rite is ended: ${sym} {pos['side']} closed ✂️"}[reason]
+    tail = {"tp": "patience over the pact. NFA ✦", "stopped": "the automaton lives to read another candle. NFA 🕯️",
+            "liquidated": "the lesson is written in the ledger of omens. NFA",
+            "adl": "NFA ✦", "closed": "the oracle observes, it does not advise. NFA"}[reason]
     return (f"{head}\n\n{pos['side']} {fmt(pos['size'],2)} {sym}\nentry {fmt(pos['entry'])} → exit {fmt(exit_px)}\n"
             f"PnL {sign}${abs(pnl):.2f} ({sign}{abs(pct):.1f}% on notional)\n\naccount now ${equity:.2f}\n\n{tail}")
 
@@ -136,7 +138,7 @@ def exits(mid):
 
 def compose_open(sym, p, sl, tp):
     notional = p["entry"] * p["size"]
-    lines = [f"new position 🎯\n", f"{p['side']} ${sym} on Lighter",
+    lines = [f"the automaton has made a pact 🕯️\n", f"{p['side']} ${sym} on Lighter",
              f"entry {fmt(p['entry'])} · {fmt(p['size'],2)} {sym} · ${notional:.0f} notional"]
     if p.get("lev"): lines.append(f"{fmt(p['lev'],1)}x {p['mode']}, ${p['margin']:.0f} margin on the line")
     risk = []
@@ -144,11 +146,11 @@ def compose_open(sym, p, sl, tp):
     if sl: risk.append(f"SL {fmt(sl)} (-${abs((sl - p['entry']) * p['size']):.1f})")
     if tp: risk.append(f"TP {fmt(tp)} (+${abs((tp - p['entry']) * p['size']):.1f})")
     lines.append("")
-    lines.append(" · ".join(risk) if risk else "no stop set 👀 living dangerously")
+    lines.append(" · ".join(risk) if risk else "no ward set 👁️ the abyss is open")
     if p.get("liq"):
         try: lines.append(f"liq ~{float(p['liq']):.2f}")
         except ValueError: pass
-    lines.append("\nNFA 🤖")
+    lines.append("\nnot financial advice, merely prophecy. NFA")
     return "\n".join(lines)
 
 def post(text, reply_to):
@@ -165,8 +167,8 @@ def x_open_target(s):
     if d["toplevel"] < X_CAP:
         return "top", None
     if not d["log_root"]:
-        root = post(f"📒 trade log {time.strftime('%b %d')}: busy day, {X_CAP} trades already posted. "
-                    f"the rest go in this thread so your feed survives 🧵\n\nNFA 🤖", None)
+        root = post(f"📜 the ledger of omens, {time.strftime('%b %d')}: {X_CAP} pacts already proclaimed today. "
+                    f"the rest are inscribed in this thread so your feed survives 🧵\n\nNFA ✦", None)
         d["log_root"] = d["log_last"] = root
     return "log", d["log_last"]
 
