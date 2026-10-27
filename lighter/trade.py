@@ -26,12 +26,14 @@ MAX_TOTAL_RISK_USD = float(os.environ.get("CHKM8_MAX_TOTAL_RISK_USD", "20"))  # 
 # stop-loss counts as MAX_LOSS_USD (so a missing stop blocks new entries until it's fixed).
 REQUIRE_SL = True
 
-# ---- FUNDING RULES (checked at entry, cannot be overridden) ----
+# ---- FUNDING RULE (operator 2026-10-26: funding direction doesn't matter; only block when it's a real cost) ----
 # Rates are Lighter's /funding-rates values (8h-normalised; 0.0001 = 0.01% per 8h, the usual baseline).
-# Shorts: operator rule "ONLY SHORT WHEN THE LONGS ARE PAYING FOR IT" -> Lighter funding must be > 0.
-# Longs: don't buy into a crowded long -> refuse if longs already pay > 3x baseline (0.03%/8h, ~33% APR).
-SHORT_MIN_FUNDING = 0.0
-LONG_MAX_FUNDING = 0.0003
+# Old rules (removed): shorts only when longs pay; longs refused above 0.03%/8h.
+# New rule, same for longs and shorts: the side we're on may pay funding, but the expected funding cost over the
+# hold must stay <= FUNDING_MAX_STOP_FRAC of the stop distance. At normal rates this never triggers; it blocks
+# extreme cases (e.g. NATGAS at 0.5%/8h costs ~1.5%/day, more than a 2% stop over a few days).
+FUNDING_HOLD_H = float(os.environ.get("CHKM8_FUNDING_HOLD_H", "72"))       # expected hold (breakouts ~3 days)
+FUNDING_MAX_STOP_FRAC = float(os.environ.get("CHKM8_FUNDING_MAX_STOP_FRAC", "0.25"))
 
 def funding(sym):
     """Current Lighter funding rate for sym (positive = longs pay shorts), plus Binance for context."""
@@ -39,14 +41,19 @@ def funding(sym):
     pick = lambda ex: next((float(r["rate"]) for r in rates if r["symbol"] == sym and r["exchange"] == ex), None)
     return pick("lighter"), pick("binance")
 
-def check_funding(sym, short):
+def check_funding(sym, short, px, sl, hold_h=None):
+    """Refuse only if the funding we'd PAY over the expected hold exceeds a quarter of the stop distance."""
+    hold_h = hold_h or FUNDING_HOLD_H
     lt, bn = funding(sym)
-    assert lt is not None, f"no Lighter funding rate for {sym}; refusing"
-    ctx = f"Lighter funding {lt*100:+.4f}%/8h (Binance {bn*100:+.4f}%)" if bn is not None else f"Lighter funding {lt*100:+.4f}%/8h"
-    if short:
-        assert lt > SHORT_MIN_FUNDING, f"SHORT refused: longs aren't paying ({ctx})"
-    else:
-        assert lt <= LONG_MAX_FUNDING, f"LONG refused: longs are crowded, paying > {LONG_MAX_FUNDING*100:.2f}%/8h ({ctx})"
+    lt = lt or 0.0                                   # no rate published -> treat as zero cost
+    ctx = f"Lighter funding {lt*100:+.4f}%/8h" + (f" (Binance {bn*100:+.4f}%)" if bn is not None else "")
+    paid_per_8h = -lt if short else lt               # > 0: our side pays; < 0: our side is paid
+    cost = max(0.0, paid_per_8h) * hold_h / 8        # fraction of notional over the hold
+    stop_frac = abs(px - sl) / px
+    ctx += f"; est. funding over {hold_h:.0f}h {('-' if paid_per_8h > 0 else '+')}{abs(paid_per_8h) * hold_h / 8 * 100:.3f}% vs stop {stop_frac*100:.2f}%"
+    assert cost <= FUNDING_MAX_STOP_FRAC * stop_frac, \
+        f"{'SHORT' if short else 'LONG'} refused: funding would cost {cost*100:.2f}% over {hold_h:.0f}h, " \
+        f"> {FUNDING_MAX_STOP_FRAC:.0%} of the {stop_frac*100:.2f}% stop ({ctx})"
     return ctx
 
 def get(path):
@@ -104,7 +111,6 @@ def open_risk(a):
 
 async def long(sym, usd, lev, sl, tp, send, short=False):
     m = market(sym); a = account()
-    fund = check_funding(sym, short)
     open_syms = [p["symbol"] for p in a.get("positions", []) if float(p.get("position") or 0)]
     assert sym not in open_syms, f"already have a {sym} position; no stacking"
     assert len(open_syms) < MAX_OPEN_POSITIONS, f"{len(open_syms)} positions open ({', '.join(open_syms)}); cap {MAX_OPEN_POSITIONS}"
@@ -121,6 +127,7 @@ async def long(sym, usd, lev, sl, tp, send, short=False):
     if tp: assert (tp - px) * d > 0, "take-profit must be on the winning side"
     loss = abs(px - sl) * size
     assert loss <= MAX_LOSS_USD, f"SL risk ${loss:.2f} > ${MAX_LOSS_USD:.0f} cap"
+    fund = check_funding(sym, short, px, sl)
     cur, parts, rc = open_risk(a); await rc.close()
     assert cur + loss <= MAX_TOTAL_RISK_USD, \
         f"total risk ${cur:.2f} open [{', '.join(parts)}] + ${loss:.2f} new > ${MAX_TOTAL_RISK_USD:.0f} cap"

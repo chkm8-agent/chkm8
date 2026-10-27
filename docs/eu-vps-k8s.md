@@ -135,6 +135,23 @@ tested against a throwaway local sshd container.
 - Hermes cron `1be97f016d72` "chkm8 signal responder" every 5m, monitor-gated by `~/.hermes/scripts/chkm8_signal_watch.sh`
   (lists scanner signals from the last 7 days; agent wakes only when the list changes). On a new signal it enters live
   (stop 2 ATR, target 4 ATR, ~1.4% risk) unless price ran > 1 ATR or a red flag. Baseline run OK; NEAR dry run passed.
+- **AUTO ENTRIES ON THE CLUSTER (operator, 2026-10-27), DRY RUN until the operator says go live:** CronJob
+  `auto-entry` (`2-59/15`, 2 min after each scanner run) -> `lighter/auto_entry.py`: fresh (bar closed < 8h) crypto
+  breakouts >= $5M/day, no-chase filters (> 1 ATR above / > 0.5 ATR below the signal close), stop 2 ATR, target 4 ATR,
+  1.4% of equity at the stop (min-size up to $25, shrink once for the $20 total), then `trade.long()` so every
+  trade.py assert applies. Mode `CHKM8_AUTO_ENTRY` (dry|live) sits in its own manifest; pause flag
+  `/data/auto_entry.pause` (trade call may set/clear it); events in `/data/auto_entry.json`. While dry, the Mac
+  responder `1be97f016d72` still trades live and logs a `COMPARE` line per signal; review job `f44f2b71cbb7`
+  emails the operator on 11-03. Cutover: `~/.hermes/scripts/chkm8_auto_entry_cutover.py --apply` (manifest -> live +
+  deploy, responder becomes the post-entry "entry review" job on `chkm8_auto_entry_watch.sh`, trade call gains the
+  AUTO ENTRIES pause/resume block). r3lik.com's board reads the mode from the CronJob (TESTING -> LIVE).
+- **LIVE ENTRIES RESUMED (operator, 2026-10-27):** responder `1be97f016d72` resumed (now ignores signals whose 4h bar
+  closed > 8h ago, so pause-era signals are skipped as stale); the PAUSED block was removed from the trade-call prompt.
+  Operator: backtests are evidence, not orders; trade on live signals and sentiment inside the code limits. A weekly
+  backtest runs Mondays 05:30 PT (report only, shown in the 07:00 PnL email): CronJob `weekly-backtest` ->
+  `lighter/weekly_backtest.py` -> `/data/weekly_backtest.json` (breakout on crypto >= $5M/day, 120 days; index dips
+  replayed through `paper_mr.step()`, 60 days; last 30/7 days, R by month, paper-bot comparison, breadth/BTC regime).
+  report.py shows it when < 30h old. First run 10-27 matched paper bot 2 trade for trade. Previous state, for history:
 - **LIVE BREAKOUT ENTRIES PAUSED (2026-10-22)** after 2W/16L: signal responder `1be97f016d72` paused; trade call
   `75243ab3fb98` only reviews open positions (no new entries). Breakout scanner now crypto-only, $5M/day floor
   (image 20261023-045607). Resume proposal (operator decides): >60% of crypto perps above EMA200 (4h) AND paper

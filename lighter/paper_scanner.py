@@ -21,7 +21,9 @@ STATE = f"{chkm8env.DATA}/paper_scanner.json"
 START_EQUITY = float(chkm8env.env("CHKM8_PAPER_START", "194"))
 RISK, MAX_OPEN, COST = 0.015, 5, 0.0007   # max 5 open (operator 2026-10-11)
 N, SL_ATR, TP_ATR, MAX_BARS = 20, 2.0, 4.0, 42
-MIN_VOL, LONG_MAX_FUNDING = 5e6, 0.0003   # $5M/day floor (2026-10-22; was $1M: MET/ARB/AERO/TIA faked out)
+MIN_VOL = 5e6   # $5M/day floor (2026-10-22; was $1M: MET/ARB/AERO/TIA faked out)
+# Funding (2026-10-26, same rule as trade.py): skip only if funding paid over ~72h > 25% of the stop distance.
+FUNDING_HOLD_H, FUNDING_MAX_STOP_FRAC = 72, 0.25
 # Operator watchlist: always scanned regardless of the volume floor (e.g. TAO, ~$0.5M/day on Lighter).
 WATCHLIST = {s.strip().upper() for s in chkm8env.env("CHKM8_WATCHLIST", "TAO").split(",") if s.strip()}
 MIN_ATR_FRAC = 0.01          # ATR floor = 1% of price -> stop at least 2% away
@@ -144,8 +146,8 @@ def main():
                "asset": "tradfi" if tradfi else "crypto"}
         if tradfi:
             sig["skipped"] = "breakouts are crypto-only"   # 2026-10-22: never backtested on tradfi; 6/16 live losses
-        elif f is not None and f > LONG_MAX_FUNDING:
-            sig["skipped"] = "crowded funding"
+        elif f is not None and max(0.0, f) * FUNDING_HOLD_H / 8 > FUNDING_MAX_STOP_FRAC * (SL_ATR * atr_used / c[i]):
+            sig["skipped"] = "funding too expensive"
         elif sym in s["open"]:
             sig["skipped"] = "already open"
         elif len(s["open"]) >= MAX_OPEN:

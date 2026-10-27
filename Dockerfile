@@ -20,7 +20,7 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt \
 RUN useradd --uid 10001 --create-home chkm8 && mkdir -p /data && chown chkm8 /data
 WORKDIR /app
 COPY chkm8env.py xpost.py mailer.py ./
-COPY lighter/monitor.py lighter/trade.py lighter/report.py lighter/paper_scanner.py lighter/paper_mr.py lighter/account.json lighter/
+COPY lighter/monitor.py lighter/trade.py lighter/report.py lighter/paper_scanner.py lighter/paper_mr.py lighter/weekly_backtest.py lighter/auto_entry.py lighter/account.json lighter/
 USER 10001
 CMD ["python", "lighter/monitor.py"]
 

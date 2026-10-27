@@ -22,6 +22,7 @@ SNAP = f"{chkm8env.DATA}/equity_snapshots.json"
 STATE = f"{chkm8env.DATA}/monitor_state.json"
 PAPER = f"{chkm8env.DATA}/paper_scanner.json"
 PAPER_MR = f"{chkm8env.DATA}/paper_mr.json"   # 15m index dip-buying paper bot (2026-10-16)
+WEEKLY_BT = f"{chkm8env.DATA}/weekly_backtest.json"   # Mondays 05:30 PT (2026-10-27); report only, never a gate
 OUT = chkm8env.REPORTS
 TZ = chkm8env.env("TZ", "America/Los_Angeles")
 
@@ -77,8 +78,12 @@ def collect():
     except (FileNotFoundError, ValueError): paper = None
     try: paper_mr = json.load(open(PAPER_MR))
     except (FileNotFoundError, ValueError): paper_mr = None
+    try:
+        wbt = json.load(open(WEEKLY_BT))
+        if now - wbt.get("generated", 0) > 30 * 3600: wbt = None      # only the Monday email
+    except (FileNotFoundError, ValueError): wbt = None
     return dict(now=now, equity=equity, free=free, prev=prev, pos=pos, closed=closed, hist=hist, wins=wins,
-                total=equity - NET_DEPOSITS, snaps=snaps, paper=paper, paper_mr=paper_mr)
+                total=equity - NET_DEPOSITS, snaps=snaps, paper=paper, paper_mr=paper_mr, wbt=wbt)
 
 CSS = """
 *{box-sizing:border-box} body{margin:0;background:#0d1117;font-family:-apple-system,'SF Pro Text',Helvetica,Arial,sans-serif;color:#e6edf3}
@@ -149,7 +154,7 @@ def render(d):
 <table><tr><th>Market</th><th>How it closed</th><th>Entry → Exit</th><th>PnL</th><th>Date</th></tr>{recent}</table>"""
     return f"""<!doctype html><html><head><meta charset="utf-8"><style>{CSS}</style></head><body><div class="wrap">
 <h1>chkm8 · daily PnL 🤖</h1><div class="sub">{datetime.fromtimestamp(d['now']):%A, %B %d %Y · %H:%M} PT · Lighter account #{IDX}</div>
-{cards}{pos_tbl}{closed_tbl}{render_paper(d)}{render_paper(d, 'paper_mr', 'Paper bot 2 · 15m index dip-buying')}
+{cards}{pos_tbl}{closed_tbl}{render_paper(d)}{render_paper(d, 'paper_mr', 'Paper bot 2 · 15m index dip-buying')}{render_wbt(d)}
 <div class="foot"><redacted:wallet-short> · private report · NFA, automated</div></div></body></html>"""
 
 
@@ -180,9 +185,34 @@ def render_paper(d, key="paper", title="Paper scanner · 4h breakout longs"):
     closedt = f'<h2>{title.split(" · ")[0]}: closed (latest)</h2><table><tr><th>Market</th><th>Exit</th><th>Entry → Exit</th><th>PnL</th><th>Date</th></tr>{recent}</table>'
     return head + stats + opent + closedt
 
+def render_wbt(d):
+    """Weekly backtest section (Mondays). Context for the desk, not a rule: the desk trades live signals + sentiment."""
+    w = d.get("wbt")
+    if not w: return ""
+    def r(st):
+        if not st or not st.get("n"): return '<td>0</td><td>–</td><td class="flat">–</td><td class="flat">–</td>'
+        return (f'<td>{st["n"]}</td><td>{st["win"]}%</td><td class="{cls(st["avgR"])}">{st["avgR"]:+.2f}R</td>'
+                f'<td class="{cls(st["sumR"])}">{st["sumR"]:+.1f}R</td>')
+    rows = ""
+    for key, name in (("breakout", "4h breakout longs"), ("index_dip", "15m index dips")):
+        b = w[key]
+        rows += (f'<tr><td><b>{name}</b> <span class="small flat">{b["days"]}d</span></td>{r(b["all"])}</tr>'
+                 f'<tr><td>&nbsp;&nbsp;last 30 days</td>{r(b["d30"])}</tr>'
+                 f'<tr><td>&nbsp;&nbsp;last 7 days</td>{r(b["d7"])}</tr>'
+                 f'<tr><td>&nbsp;&nbsp;paper bot, last 30 days</td>{r(b.get("paper_d30"))}</tr>')
+    g = w.get("regime", {}); btc = g.get("btc") or {}
+    months = " · ".join(f'{m} <span class="{cls(v)}">{v:+.1f}R</span>' for m, v in w["breakout"]["months"])
+    ctx = (f'<div class="foot" style="margin-top:8px">Breakout by month: {months}<br>Regime: '
+           f'{g.get("breadth_ema200", "?")}% of crypto perps above their 4h EMA200 · BTC '
+           f'{"above" if btc.get("above") else "below"} its EMA200. Context only: a backtest doesn\'t predict the '
+           f'future, so the desk still trades live signals and sentiment inside the caps.</div>')
+    return ('<h2>Weekly backtest · fresh data, same rules as the paper bots</h2><table><tr><th>Strategy</th>'
+            '<th>Trades</th><th>Win</th><th>Avg R</th><th>Total R</th></tr>' + rows + '</table>' + ctx)
+
+
 def screenshot(html_path, png_path):
     args = [browser(), "--headless=new", "--disable-gpu", "--hide-scrollbars", "--force-device-scale-factor=2",
-            "--window-size=860,2000", f"--screenshot={png_path}", f"file://{html_path}"]
+            "--window-size=860,3600", f"--screenshot={png_path}", f"file://{html_path}"]
     if chkm8env.IN_CONTAINER:
         args[1:1] = ["--no-sandbox", "--disable-dev-shm-usage"]   # no user namespaces / small /dev/shm in pods
     r = subprocess.run(args, capture_output=True, text=True, timeout=90)
@@ -215,6 +245,12 @@ def text_summary(d):
         cq = q.get("closed", [])
         lines.append(f"Paper bot 2 (15m index dips): equity ${q['equity']:,.2f} ({money(q['equity'] - q['start'])}), "
                      f"{len(cq)} closed ({sum(1 for x in cq if x['pnl'] > 0)} W), {len(q.get('open', {}))} open")
+    w = d.get("wbt")
+    if w:
+        b, i = w["breakout"], w["index_dip"]
+        lines.append(f"Weekly backtest: breakout {b['all']['n']} trades {b['all']['avgR']:+.2f}R avg "
+                     f"(30d {b['d30']['avgR']:+.2f}R), index dips {i['all']['n']} trades {i['all']['avgR']:+.2f}R avg "
+                     f"(30d {i['d30']['avgR']:+.2f}R); breadth {w['regime'].get('breadth_ema200')}%. Context, not a rule.")
     lines.append("\nFull report attached. Explorer: https://app.lighter.xyz/explorer/accounts/" + ACC["l1"])
     return "\n".join(lines)
 
