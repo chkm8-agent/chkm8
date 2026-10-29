@@ -22,9 +22,8 @@ this directory.
 Related repos (separate checkouts under `~/chkm8/`):
 [chkm8-research](https://github.com/chkm8-agent/chkm8-research) (`research/`),
 [chkm8-wiki](https://github.com/chkm8-agent/chkm8-wiki) (`wiki/`),
-[fantasy-basketball](https://github.com/chkm8-agent/fantasy-basketball) (`fantasy/`),
 [chkm8-x](https://github.com/chkm8-agent/chkm8-x) (`x/`); private: `chkm8-trading` (k8s deploy
-config, `deploy/`) and one personal repo.
+config, `deploy/`), `fantasy-basketball` (`fantasy/`) and one personal repo.
 
 ## Local config
 
