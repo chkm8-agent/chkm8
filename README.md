@@ -1,6 +1,6 @@
 # chkm8
 
-Built by Mike Czarny ([r3lik](https://r3lik.com)) on a stock [Hermes Agent](https://hermes-agent.nousresearch.com) install.
+Built by Mike Czarny ([r3lik](https://r3lik.com)) on [Hermes Agent](https://hermes-agent.nousresearch.com), running our fork, [chkm8-agent/hermes-agent](https://github.com/chkm8-agent/hermes-agent) (upstream plus a small patch set, e.g. per-thread email sessions).
 
 Core code for chkm8, an autonomous crypto agent: the Lighter.xyz perps stack (position monitor,
 trade runner, PnL report, paper bots), shared runtime helpers, email and X posting, wallet tooling,
